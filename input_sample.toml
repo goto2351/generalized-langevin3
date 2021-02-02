@@ -1,0 +1,26 @@
+[meta_data]
+project_name = "test2"
+working_path = "./output"
+random_seed = 12345678
+step_num = 10000
+save_step_num = 10
+temperature = 300.0
+delta_t = 0.01
+
+[constants]
+friction_coefficient = 1.0
+coupling_coefficient = 1.0
+K_b = 0.1380649
+equilibrium_length = 0.7
+
+[bath]
+mass = 1.0
+x = -0.5
+y = 0.0
+z = 0.0
+
+[particle]
+mass = 1.0
+x = 2.0
+y = 1.0
+z = 0.5
