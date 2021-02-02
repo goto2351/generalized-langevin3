@@ -7,6 +7,7 @@
 #include <cmath>
 #include <array>
 #include <random>
+#include <vector>
 #include "./toml11/toml.hpp"
 #include "./particle.hpp"
 
@@ -21,19 +22,21 @@ namespace generalized_langevin {
             double coupling_coefficient;
             double K_b;
             double equilibrium_length;
+            double potential_coefficient;
 
-            Particle bath;//熱浴のダミー粒子
-            Particle particle;
+            std::vector<Particle> bath;//熱浴のダミー粒子
+            std::vector<Particle> particle;
             std::ofstream out_coordinate;//粒子の座標の出力先
-            std::ofstream out_energy;//エネルギーの出力先
+            std::ofstream out_distance;//エネルギーの出力先
             std::mt19937 random_engine;
             std::size_t step_num;
             std::size_t save_step_num;
+            std::size_t n_particle;//粒子数
             double delta_t;
             double temperature;
             std::normal_distribution<> xi_engine;
-            std::array<double, 3> xi_t;
-            std::array<double, 3> xi_tph;
+            std::vector<std::array<double, 3>> xi_t;
+            std::vector<std::array<double, 3>> xi_tph;
 
             void step() noexcept;
             //粒子の座標と速度を求める関数
@@ -53,22 +56,39 @@ namespace generalized_langevin {
         coupling_coefficient = toml::find<double>(input_setup_file, "constants", "coupling_coefficient");
         K_b = toml::find<double>(input_setup_file, "constants", "K_b");
         equilibrium_length = toml::find<double>(input_setup_file, "constants", "equilibrium_length");
+        potential_coefficient = toml::find<double>(input_setup_file, "constants", "potential_coefficient");
+        const auto random_seed = toml::find<std::size_t>(input_setup_file, "meta_data", "random_seed");
+        random_engine.seed(random_seed);
+        n_particle = toml::find<std::size_t>(input_setup_file, "meta_data", "n_particle");
 
-        //熱浴と粒子の初期化
-        bath.x = toml::find<double>(input_setup_file, "bath", "x");
-        bath.y = toml::find<double>(input_setup_file, "bath", "y");
-        bath.z = toml::find<double>(input_setup_file, "bath", "z");
-        bath.vx = 0.0;
-        bath.vy = 0.0;
-        bath.vz = 0.0;
-        bath.mass = toml::find<double>(input_setup_file, "bath", "mass");
-        particle.x = toml::find<double>(input_setup_file, "particle", "x");
-        particle.y = toml::find<double>(input_setup_file, "particle", "y");
-        particle.z = toml::find<double>(input_setup_file, "particle", "z");
-        particle.vx = 0.0;
-        particle.vy = 0.0;
-        particle.vz = 0.0;
-        particle.mass = toml::find<double>(input_setup_file, "particle", "mass");
+        //粒子と熱浴の初期化
+        particle.resize(n_particle);
+        bath.resize(n_particle);
+        double particle_x = toml::find<double>(input_setup_file, "particle", "x");
+        double particle_y = toml::find<double>(input_setup_file, "particle", "y");
+        double particle_z = toml::find<double>(input_setup_file, "particle", "z");
+        double particle_mass = toml::find<double>(input_setup_file, "particle", "mass");
+        for (std::size_t i = 0; i < n_particle; ++i) {
+            particle[i].x = particle_x;
+            particle[i].y = particle_y;
+            particle[i].z = particle_z;
+            particle[i].vx = 0.0;
+            particle[i].vy = 0.0;
+            particle[i].vz = 0.0;
+            particle[i].mass = particle_mass;
+        }
+        double bath_mass = toml::find<double>(input_setup_file, "bath", "mass");
+        //熱浴の初期位置をランダムに決めるための乱数
+        std::uniform_real_distribution<double> rand_coordinate(0.0, 1.0);
+        for (std::size_t i = 0; i < n_particle; ++i) {
+            bath[i].x = rand_coordinate(random_engine);
+            bath[i].y = rand_coordinate(random_engine);
+            bath[i].z = rand_coordinate(random_engine);
+            bath[i].vx = 0.0;
+            bath[i].vy = 0.0;
+            bath[i].vz = 0.0;
+            bath[i].mass = bath_mass;
+        }
 
         //アウトプットファイルを開く
         const auto project_name = toml::find<std::string>(input_setup_file, "meta_data", "project_name");
@@ -78,14 +98,11 @@ namespace generalized_langevin {
             std::cerr << "cannot open:" << working_path + "/" + project_name + ".xyz" << std::endl;
             std::exit(1);
         }
-        out_energy.open(working_path + "/" + project_name + "_energy.csv");
-        if(!out_energy) {
-            std::cerr << "cannot open:" << working_path + "/" + project_name + "_energy.txt" << std::endl;
+        out_distance.open(working_path + "/" + project_name + "_energy.csv");
+        if(!out_distance) {
+            std::cerr << "cannot open:" << working_path + "/" + project_name + "_distance.txt" << std::endl;
             std::exit(1);
         }
-
-        const auto random_seed = toml::find<std::size_t>(input_setup_file, "meta_data", "random_seed");
-        random_engine.seed(random_seed);
 
         step_num = toml::find<std::size_t>(input_setup_file, "meta_data", "step_num");
         save_step_num = toml::find<std::size_t>(input_setup_file, "meta_data", "save_step_num");
@@ -94,17 +111,20 @@ namespace generalized_langevin {
 
         std::normal_distribution<> init_xi_engine(0.0, std::sqrt((2.0*friction_coefficient*K_b*temperature*delta_t)/bath.mass));
         xi_engine = init_xi_engine;
-
-        xi_t = {
-            xi_engine(random_engine),
-            xi_engine(random_engine),
-            xi_engine(random_engine)
-        };
-        xi_tph = {
-            xi_engine(random_engine),
-            xi_engine(random_engine),
-            xi_engine(random_engine)
-        };
+        xi_t.resize(n_particle);
+        xi_tph.resize(n_particle);
+        for (std::size_t i = 0; i < n_particle; ++i) {
+            xi_t[i] = {
+                xi_engine(random_engine),
+                xi_engine(random_engine),
+                xi_engine(random_engine)
+            };
+            xi_tph[i] = {
+                xi_engine(random_engine),
+                xi_engine(random_engine),
+                xi_engine(random_engine)
+            };
+        }
     }//constructor
 
     void Simulator::run() noexcept {
