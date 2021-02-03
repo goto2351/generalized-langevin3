@@ -43,8 +43,8 @@ namespace generalized_langevin {
             std::array<double, 3> calculate_coordinate(Particle p, Particle b) noexcept;
             std::array<double, 3> calculate_velocity(Particle p, Particle new_p, Particle b) noexcept;
             //熱浴の座標と速度をランジュバン方程式に従って求める関数
-            std::array<double, 3> langevin_coordinate(Particle b) noexcept;
-            std::array<double, 3> langevin_velocity(Particle b) noexcept;
+            std::array<double, 3> langevin_coordinate(Particle b, std::size_t i_particle) noexcept;
+            std::array<double, 3> langevin_velocity(Particle b, std::size_t i_particle) noexcept;
             void write_output(std::size_t step_index) noexcept;
     };//Simulator
 
@@ -142,12 +142,11 @@ namespace generalized_langevin {
             Particle new_bath = bath[i];
             Particle new_particle = particle[i];
 
-            //langevin_coordinateなどは乱数を使うのであとで引数に粒子の番号を加える
-            const auto [new_bath_x, new_bath_y, new_bath_z] = langevin_coordinate(bath[i]);
+            const auto [new_bath_x, new_bath_y, new_bath_z] = langevin_coordinate(bath[i], i);
             new_bath.x = new_bath_x;
             new_bath.y = new_bath_y;
             new_bath.z = new_bath_z;
-            const auto [new_bath_vx, new_bath_vy, new_bath_vz] = langevin_velocity(bath[i]);
+            const auto [new_bath_vx, new_bath_vy, new_bath_vz] = langevin_velocity(bath[i], i);
             new_bath.vx = new_bath_vx;
             new_bath.vy = new_bath_vy;
             new_bath.vz = new_bath_vz;
@@ -173,22 +172,22 @@ namespace generalized_langevin {
         }
     }
 
-    std::array<double, 3> Simulator::langevin_coordinate(Particle b) noexcept {
+    std::array<double, 3> Simulator::langevin_coordinate(Particle b, std::size_t i_particle) noexcept {
         //速度Verlet法で熱浴の次の時刻の座標を求める
-        const double next_x = b.x + b.vx*delta_t*(1.0-(friction_coefficient*delta_t)/2.0) + ((delta_t*delta_t)/2.0)*xi_t[0];
-        const double next_y = b.y + b.vy*delta_t*(1.0-(friction_coefficient*delta_t)/2.0) + ((delta_t*delta_t)/2.0)*xi_t[1];
-        const double next_z = b.z + b.vz*delta_t*(1.0-(friction_coefficient*delta_t)/2.0) + ((delta_t*delta_t)/2.0)*xi_t[2];
+        const double next_x = b.x + b.vx*delta_t*(1.0-(friction_coefficient*delta_t)/2.0) + ((delta_t*delta_t)/2.0)*xi_t[i_particle][0];
+        const double next_y = b.y + b.vy*delta_t*(1.0-(friction_coefficient*delta_t)/2.0) + ((delta_t*delta_t)/2.0)*xi_t[i_particle][1];
+        const double next_z = b.z + b.vz*delta_t*(1.0-(friction_coefficient*delta_t)/2.0) + ((delta_t*delta_t)/2.0)*xi_t[i_particle][2];
 
         return {next_x, next_y, next_z};
     }
 
-    std::array<double, 3> Simulator::langevin_velocity(Particle b) noexcept {
+    std::array<double, 3> Simulator::langevin_velocity(Particle b, std::size_t i_particle) noexcept {
         const double term1 = 1.0 - (friction_coefficient*delta_t)/2.0;
         const double term2 = 1.0 - (friction_coefficient*delta_t)/2.0 + ((friction_coefficient*delta_t)/2.0)*((friction_coefficient*delta_t)/2.0);
 
-        const double next_vx = b.vx*term1*term2 + (delta_t/2.0)*term2*(xi_t[0] + xi_tph[0]);
-        const double next_vy = b.vx*term1*term2 + (delta_t/2.0)*term2*(xi_t[1] + xi_tph[1]);
-        const double next_vz = b.vx*term1*term2 + (delta_t/2.0)*term2*(xi_t[2] + xi_tph[2]);
+        const double next_vx = b.vx*term1*term2 + (delta_t/2.0)*term2*(xi_t[i_particle][0] + xi_tph[i_particle][0]);
+        const double next_vy = b.vx*term1*term2 + (delta_t/2.0)*term2*(xi_t[i_particle][1] + xi_tph[i_particle][1]);
+        const double next_vz = b.vx*term1*term2 + (delta_t/2.0)*term2*(xi_t[i_particle][2] + xi_tph[i_particle][2]);
 
         return {next_vx, next_vy, next_vz};
     }
