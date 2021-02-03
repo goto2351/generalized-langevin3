@@ -138,36 +138,39 @@ namespace generalized_langevin {
     }
 
     void Simulator::step() noexcept {
-        Particle new_bath = bath;
-        Particle new_particle = particle;
+        for (std::size_t i = 0; i < n_particle; ++i) {
+            Particle new_bath = bath[i];
+            Particle new_particle = particle[i];
 
-        const auto [new_bath_x, new_bath_y, new_bath_z] = langevin_coordinate(bath);
-        new_bath.x = new_bath_x;
-        new_bath.y = new_bath_y;
-        new_bath.z = new_bath_z;
-        const auto [new_bath_vx, new_bath_vy, new_bath_vz] = langevin_velocity(bath);
-        new_bath.vx = new_bath_vx;
-        new_bath.vy = new_bath_vy;
-        new_bath.vz = new_bath_vz;
+            //langevin_coordinateなどは乱数を使うのであとで引数に粒子の番号を加える
+            const auto [new_bath_x, new_bath_y, new_bath_z] = langevin_coordinate(bath[i]);
+            new_bath.x = new_bath_x;
+            new_bath.y = new_bath_y;
+            new_bath.z = new_bath_z;
+            const auto [new_bath_vx, new_bath_vy, new_bath_vz] = langevin_velocity(bath[i]);
+            new_bath.vx = new_bath_vx;
+            new_bath.vy = new_bath_vy;
+            new_bath.vz = new_bath_vz;
 
-        const auto [new_particle_x, new_particle_y, new_particle_z] = calculate_coordinate(particle, bath);
-        new_particle.x = new_particle_x;
-        new_particle.y = new_particle_y;
-        new_particle.z = new_particle_z;
-        const auto [new_particle_vx, new_particle_vy, new_particle_vz] = calculate_velocity(particle, new_particle, bath);
-        new_particle.vx = new_particle_vx;
-        new_particle.vy = new_particle_vy;
-        new_particle.vz = new_particle_vz;
+            const auto [new_particle_x, new_particle_y, new_particle_z] = calculate_coordinate(particle[i], bath[i]);
+            new_particle.x = new_particle_x;
+            new_particle.y = new_particle_y;
+            new_particle.z = new_particle_z;
+            const auto [new_particle_vx, new_particle_vy, new_particle_vz] = calculate_velocity(particle[i], new_particle, bath[i]);
+            new_particle.vx = new_particle_vx;
+            new_particle.vy = new_particle_vy;
+            new_particle.vz = new_particle_vz;
 
-        bath = new_bath;
-        particle = new_particle;
+            bath[i] = new_bath;
+            particle[i] = new_particle;
 
-        xi_t = xi_tph;
-        xi_tph = {
-            xi_engine(random_engine),
-            xi_engine(random_engine),
-            xi_engine(random_engine)
-        };
+            xi_t[i] = xi_tph[i];
+            xi_tph[i] = {
+                xi_engine(random_engine),
+                xi_engine(random_engine),
+                xi_engine(random_engine)
+            };
+        }
     }
 
     std::array<double, 3> Simulator::langevin_coordinate(Particle b) noexcept {
