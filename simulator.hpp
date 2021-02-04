@@ -45,6 +45,8 @@ namespace generalized_langevin {
             //熱浴の座標と速度をランジュバン方程式に従って求める関数
             std::array<double, 3> langevin_coordinate(Particle b, std::size_t i_particle) noexcept;
             std::array<double, 3> langevin_velocity(Particle b, std::size_t i_particle) noexcept;
+            //粒子の原点からの距離を求める関数
+            double distance(Particle p) noexcept;
             void write_output(std::size_t step_index) noexcept;
     };//Simulator
 
@@ -103,6 +105,7 @@ namespace generalized_langevin {
             std::cerr << "cannot open:" << working_path + "/" + project_name + "_distance.txt" << std::endl;
             std::exit(1);
         }
+        out_distance << "step,time,average_distance" << std::endl;//見出し
 
         step_num = toml::find<std::size_t>(input_setup_file, "meta_data", "step_num");
         save_step_num = toml::find<std::size_t>(input_setup_file, "meta_data", "save_step_num");
@@ -242,13 +245,28 @@ namespace generalized_langevin {
         return {next_vx, next_vy, next_vz};
     }
 
+    double Simulator::distance(Particle p) noexcept {
+        double res = p.x*p.x + p.y*p.y + p.z*p.z;
+        res = std::sqrt(res);
+        return res;
+    }
+
     void  Simulator::write_output(std::size_t step_index) noexcept {
-        //座標の書き出し
+        //座標の書き出し(試験的に1粒子分のみ)
         out_coordinate << "2" << std::endl;
         out_coordinate << std::endl;
-        out_coordinate << "H " << bath.x << " " << bath.y << " " << bath.z << std::endl;
-        out_coordinate << "C " << particle.x << " " << particle.y << " " << particle.z << std::endl;
+        out_coordinate << "H " << bath[0].x << " " << bath[0].y << " " << bath[0].z << std::endl;
+        out_coordinate << "C " << particle[0].x << " " << particle[0].y << " " << particle[0].z << std::endl;
 
+        //粒子の原点からの距離の平均を書き出す
+        double average;
+        for (std::size_t i = 0; i < n_particle; ++i) {
+            average += distance(particle[i]);
+        }
+        average = average/n_particle;
+        
+        out_distance << step_index << "," << step_index*delta_t << "," << average << std::endl;
+        /*
         //エネルギーの書き出し
         double kinetic_energy = particle.mass*(std::pow(particle.vx, 2.0) + std::pow(particle.vy, 2.0) + std::pow(particle.vz, 2.0))/2.0
                                 + bath.mass*(std::pow(bath.vx, 2.0) + std::pow(bath.vy, 2.0) + std::pow(bath.vz, 2.0))/2.0;
@@ -259,7 +277,7 @@ namespace generalized_langevin {
         const double distance = std::sqrt(vec[0]*vec[0] + vec[1]*vec[1] + vec[2]*vec[2]);
         double potential_energy = coupling_coefficient*(distance - equilibrium_length)*(distance - equilibrium_length)/2.0;
 
-        out_energy << step_index << "," << kinetic_energy + potential_energy << std::endl;
+        out_energy << step_index << "," << kinetic_energy + potential_energy << std::endl; */
     }
 
 }//generalized_langevin
