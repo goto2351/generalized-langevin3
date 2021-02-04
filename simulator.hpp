@@ -45,6 +45,9 @@ namespace generalized_langevin {
             //熱浴の座標と速度をランジュバン方程式に従って求める関数
             std::array<double, 3> langevin_coordinate(Particle b, std::size_t i_particle) noexcept;
             std::array<double, 3> langevin_velocity(Particle b, std::size_t i_particle) noexcept;
+            //ポテンシャル関連
+            std::array<double, 3> grad_cos_potential(Particle p) noexcept;
+            std::array<double, 3> grad_to_force(std::array<double, 3> grad) noexcept;
             //粒子の原点からの距離を求める関数
             double distance(Particle p) noexcept;
             void write_output(std::size_t step_index) noexcept;
@@ -207,6 +210,11 @@ namespace generalized_langevin {
         f[0] = term1*vec[0];
         f[1] = term1*vec[1];
         f[2] = term1*vec[2];
+        //ポテンシャルから受ける力を加える
+        std::array<double, 3> f_potential = grad_to_force(grad_cos_potential(p));
+        f[0] += f_potential[0];
+        f[1] += f_potential[1];
+        f[2] += f_potential[2];
 
         const double next_x = p.x + p.vx*delta_t + (f[0]/p.mass)*delta_t*delta_t/2.0;
         const double next_y = p.y + p.vy*delta_t + (f[1]/p.mass)*delta_t*delta_t/2.0;
@@ -226,6 +234,11 @@ namespace generalized_langevin {
         f[0] = term1*vec[0];
         f[1] = term1*vec[1];
         f[2] = term1*vec[2];
+        //ポテンシャルから受ける力を加える
+        std::array<double, 3> f_potential = grad_to_force(grad_cos_potential(p));
+        f[0] += f_potential[0];
+        f[1] += f_potential[1];
+        f[2] += f_potential[2];
 
         std::array<double, 3> next_vec;
         next_vec[0] = new_p.x - b.x;
@@ -237,6 +250,10 @@ namespace generalized_langevin {
         next_f[0] = next_term1*next_vec[0];
         next_f[1] = next_term1*next_vec[1];
         next_f[2] = next_term1*next_vec[2];
+        std::array<double, 3> next_f_potential = grad_to_force(grad_cos_potential(new_p));
+        next_f[0] = next_f_potential[0];
+        next_f[1] = next_f_potential[1];
+        next_f[2] = next_f_potential[2];
 
         const double next_vx = p.vx + (delta_t/2.0)*(next_f[0] + f[0])/p.mass;
         const double next_vy = p.vy + (delta_t/2.0)*(next_f[1] + f[1])/p.mass;
@@ -249,6 +266,24 @@ namespace generalized_langevin {
         double res = p.x*p.x + p.y*p.y + p.z*p.z;
         res = std::sqrt(res);
         return res;
+    }
+
+    std::array<double, 3> Simulator::grad_cos_potential(Particle p) noexcept {
+        double r = distance(p);
+        const double grad_x = std::sin(potential_coefficient*r)*p.x/r;
+        const double grad_y = std::sin(potential_coefficient*r)*p.y/r;
+        const double grad_z = std::sin(potential_coefficient*r)*p.z/r;
+
+        return {grad_x, grad_y, grad_z};
+    }
+
+    std::array<double, 3> Simulator::grad_to_force(std::array<double, 3> grad) {
+        std::array<double, 3> f;
+        for (std::size_t i = 0; i <= 2; ++ i) {
+            f[i] = grad[i] * -1.0;
+        }
+
+        return f;
     }
 
     void  Simulator::write_output(std::size_t step_index) noexcept {
