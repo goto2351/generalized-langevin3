@@ -98,12 +98,12 @@ namespace generalized_langevin {
         //アウトプットファイルを開く
         const auto project_name = toml::find<std::string>(input_setup_file, "meta_data", "project_name");
         const auto working_path = toml::find<std::string>(input_setup_file, "meta_data", "working_path");
-        out_coordinate.open(working_path + "/" + project_name + ".xyz");
+        out_coordinate.open(working_path + "/" + project_name + "_coordinate.xyz");
         if(!out_coordinate) {
             std::cerr << "cannot open:" << working_path + "/" + project_name + ".xyz" << std::endl;
             std::exit(1);
         }
-        out_distance.open(working_path + "/" + project_name + "_energy.csv");
+        out_distance.open(working_path + "/" + project_name + "_distance.csv");
         if(!out_distance) {
             std::cerr << "cannot open:" << working_path + "/" + project_name + "_distance.txt" << std::endl;
             std::exit(1);
@@ -115,7 +115,7 @@ namespace generalized_langevin {
         temperature = toml::find<double>(input_setup_file, "meta_data", "temperature");
         delta_t = toml::find<double>(input_setup_file, "meta_data", "delta_t");
 
-        std::normal_distribution<> init_xi_engine(0.0, std::sqrt((2.0*friction_coefficient*K_b*temperature*delta_t)/bath.mass));
+        std::normal_distribution<> init_xi_engine(0.0, std::sqrt((2.0*friction_coefficient*K_b*temperature*delta_t)/bath_mass));
         xi_engine = init_xi_engine;
         xi_t.resize(n_particle);
         xi_tph.resize(n_particle);
@@ -270,14 +270,14 @@ namespace generalized_langevin {
 
     std::array<double, 3> Simulator::grad_cos_potential(Particle p) noexcept {
         double r = distance(p);
-        const double grad_x = std::sin(potential_coefficient*r)*p.x/r;
-        const double grad_y = std::sin(potential_coefficient*r)*p.y/r;
-        const double grad_z = std::sin(potential_coefficient*r)*p.z/r;
+        const double grad_x = potential_coefficient*std::sin(potential_coefficient*r)*p.x/r;
+        const double grad_y = potential_coefficient*std::sin(potential_coefficient*r)*p.y/r;
+        const double grad_z = potential_coefficient*std::sin(potential_coefficient*r)*p.z/r;
 
         return {grad_x, grad_y, grad_z};
     }
 
-    std::array<double, 3> Simulator::grad_to_force(std::array<double, 3> grad) {
+    std::array<double, 3> Simulator::grad_to_force(std::array<double, 3> grad) noexcept {
         std::array<double, 3> f;
         for (std::size_t i = 0; i <= 2; ++ i) {
             f[i] = grad[i] * -1.0;
