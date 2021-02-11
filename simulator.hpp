@@ -23,6 +23,7 @@ namespace generalized_langevin {
             double K_b;
             double equilibrium_length;
             double potential_coefficient;
+            double potential_height;
 
             std::vector<Particle> bath;//熱浴のダミー粒子
             std::vector<Particle> particle;
@@ -62,6 +63,7 @@ namespace generalized_langevin {
         K_b = toml::find<double>(input_setup_file, "constants", "K_b");
         equilibrium_length = toml::find<double>(input_setup_file, "constants", "equilibrium_length");
         potential_coefficient = toml::find<double>(input_setup_file, "constants", "potential_coefficient");
+        potential_height = toml::find<double>(input_setup_file, "constants", "potential_height");
         const auto random_seed = toml::find<std::size_t>(input_setup_file, "meta_data", "random_seed");
         random_engine.seed(random_seed);
         n_particle = toml::find<std::size_t>(input_setup_file, "meta_data", "n_particle");
@@ -83,6 +85,19 @@ namespace generalized_langevin {
             particle[i].mass = particle_mass;
         }
         double bath_mass = toml::find<double>(input_setup_file, "bath", "mass");
+        double bath_x = toml::find<double>(input_setup_file, "bath", "x");
+        double bath_y = toml::find<double>(input_setup_file, "bath", "y");
+        double bath_z = toml::find<double>(input_setup_file, "bath", "z");
+        for (std::size_t i = 0; i < n_particle; ++i) {
+            bath[i].x = bath_x;
+            bath[i].y = bath_y;
+            bath[i].z = bath_z;
+            bath[i].vx = 0.0;
+            bath[i].vy = 0.0;
+            bath[i].vz = 0.0;
+            bath[i].mass = bath_mass;
+        }
+        /*
         //熱浴の初期位置をランダムに決めるための乱数
         std::uniform_real_distribution<double> rand_coordinate(0.0, 1.0);
         for (std::size_t i = 0; i < n_particle; ++i) {
@@ -93,7 +108,7 @@ namespace generalized_langevin {
             bath[i].vy = 0.0;
             bath[i].vz = 0.0;
             bath[i].mass = bath_mass;
-        }
+        }*/
 
         //アウトプットファイルを開く
         const auto project_name = toml::find<std::string>(input_setup_file, "meta_data", "project_name");
@@ -270,9 +285,9 @@ namespace generalized_langevin {
 
     std::array<double, 3> Simulator::grad_cos_potential(Particle p) noexcept {
         double r = distance(p);
-        const double grad_x = potential_coefficient*std::sin(potential_coefficient*r)*p.x/r;
-        const double grad_y = potential_coefficient*std::sin(potential_coefficient*r)*p.y/r;
-        const double grad_z = potential_coefficient*std::sin(potential_coefficient*r)*p.z/r;
+        const double grad_x = potential_height*potential_coefficient*std::sin(potential_coefficient*r)*p.x/r;
+        const double grad_y = potential_height*potential_coefficient*std::sin(potential_coefficient*r)*p.y/r;
+        const double grad_z = potential_height*potential_coefficient*std::sin(potential_coefficient*r)*p.z/r;
 
         return {grad_x, grad_y, grad_z};
     }
@@ -287,7 +302,7 @@ namespace generalized_langevin {
     }
 
     void  Simulator::write_output(std::size_t step_index) noexcept {
-        //座標の書き出し(試験的に1粒子分のみ)
+        //座標の書き出し
         out_coordinate << "2" << std::endl;
         out_coordinate << std::endl;
         out_coordinate << "H " << bath[0].x << " " << bath[0].y << " " << bath[0].z << std::endl;
