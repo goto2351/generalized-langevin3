@@ -42,10 +42,10 @@ namespace generalized_langevin {
             void step() noexcept;
             //粒子の座標と速度を求める関数
             std::array<double, 3> calculate_coordinate(Particle p, Particle b) noexcept;
-            std::array<double, 3> calculate_velocity(Particle p, Particle new_p, Particle b) noexcept;
+            std::array<double, 3> calculate_velocity(Particle p, Particle new_p, Particle b, Particle new_b) noexcept;
             //熱浴の座標と速度をランジュバン方程式に従って求める関数
-            std::array<double, 3> langevin_coordinate(Particle b, std::size_t i_particle) noexcept;
-            std::array<double, 3> langevin_velocity(Particle b, std::size_t i_particle) noexcept;
+            std::array<double, 3> langevin_coordinate(Particle b, Particle p, std::size_t i_particle) noexcept;
+            std::array<double, 3> langevin_velocity(Particle b, Particle new_b, Particle p, Particle new_p, std::size_t i_particle) noexcept;
             //ポテンシャル関連
             std::array<double, 3> grad_cos_potential(Particle p) noexcept;
             std::array<double, 3> grad_to_force(std::array<double, 3> grad) noexcept;
@@ -163,20 +163,20 @@ namespace generalized_langevin {
             Particle new_bath = bath[i];
             Particle new_particle = particle[i];
 
-            const auto [new_bath_x, new_bath_y, new_bath_z] = langevin_coordinate(bath[i], i);
+            const auto [new_bath_x, new_bath_y, new_bath_z] = langevin_coordinate(bath[i], particle[i] ,i);
             new_bath.x = new_bath_x;
             new_bath.y = new_bath_y;
             new_bath.z = new_bath_z;
-            const auto [new_bath_vx, new_bath_vy, new_bath_vz] = langevin_velocity(bath[i], i);
-            new_bath.vx = new_bath_vx;
-            new_bath.vy = new_bath_vy;
-            new_bath.vz = new_bath_vz;
-
             const auto [new_particle_x, new_particle_y, new_particle_z] = calculate_coordinate(particle[i], bath[i]);
             new_particle.x = new_particle_x;
             new_particle.y = new_particle_y;
             new_particle.z = new_particle_z;
-            const auto [new_particle_vx, new_particle_vy, new_particle_vz] = calculate_velocity(particle[i], new_particle, bath[i]);
+
+            const auto [new_bath_vx, new_bath_vy, new_bath_vz] = langevin_velocity(bath[i],new_bath, particle[i], new_particle,i);
+            new_bath.vx = new_bath_vx;
+            new_bath.vy = new_bath_vy;
+            new_bath.vz = new_bath_vz;
+            const auto [new_particle_vx, new_particle_vy, new_particle_vz] = calculate_velocity(particle[i], new_particle, bath[i], new_bath);
             new_particle.vx = new_particle_vx;
             new_particle.vy = new_particle_vy;
             new_particle.vz = new_particle_vz;
@@ -193,22 +193,57 @@ namespace generalized_langevin {
         }
     }
 
-    std::array<double, 3> Simulator::langevin_coordinate(Particle b, std::size_t i_particle) noexcept {
+    std::array<double, 3> Simulator::langevin_coordinate(Particle b, Particle p, std::size_t i_particle) noexcept {
+        //外力
+        std::array<double, 3> vec;
+        vec[0] = b.x - p.x;
+        vec[1] = b.y - p.y;
+        vec[2] = b.z - p.z;
+        const double distance = std::sqrt(vec[0]*vec[0] + vec[1]*vec[1] + vec[2]*vec[2]);
+        const double term1 = (-1.0*coupling_coefficient*(distance - equilibrium_length)) /distance;
+        std::array<double,3> f;
+        f[0] = term1*vec[0];
+        f[1] = term1*vec[1];
+        f[2] = term1*vec[2];
+
         //速度Verlet法で熱浴の次の時刻の座標を求める
-        const double next_x = b.x + b.vx*delta_t*(1.0-(friction_coefficient*delta_t)/2.0) + ((delta_t*delta_t)/2.0)*xi_t[i_particle][0];
-        const double next_y = b.y + b.vy*delta_t*(1.0-(friction_coefficient*delta_t)/2.0) + ((delta_t*delta_t)/2.0)*xi_t[i_particle][1];
-        const double next_z = b.z + b.vz*delta_t*(1.0-(friction_coefficient*delta_t)/2.0) + ((delta_t*delta_t)/2.0)*xi_t[i_particle][2];
+        const double next_x = b.x + b.vx*delta_t*(1.0-(friction_coefficient*delta_t)/2.0) + ((delta_t*delta_t)/2.0)*(f[0]/b.mass+xi_t[i_particle][0]);
+        const double next_y = b.y + b.vy*delta_t*(1.0-(friction_coefficient*delta_t)/2.0) + ((delta_t*delta_t)/2.0)*(f[1]/b.mass+xi_t[i_particle][1]);
+        const double next_z = b.z + b.vz*delta_t*(1.0-(friction_coefficient*delta_t)/2.0) + ((delta_t*delta_t)/2.0)*(f[2]/b.mass+xi_t[i_particle][2]);
 
         return {next_x, next_y, next_z};
     }
 
-    std::array<double, 3> Simulator::langevin_velocity(Particle b, std::size_t i_particle) noexcept {
+    std::array<double, 3> Simulator::langevin_velocity(Particle b, Particle new_b, Particle p, Particle new_p, std::size_t i_particle) noexcept {
+        //外力
+        std::array<double, 3> vec;
+        vec[0] = b.x - p.x;
+        vec[1] = b.y - p.y;
+        vec[2] = b.z - p.z;
+        const double distance = std::sqrt(vec[0]*vec[0] + vec[1]*vec[1] + vec[2]*vec[2]);
+        const double coeff = (-1.0*coupling_coefficient*(distance - equilibrium_length)) /distance;
+        std::array<double,3> f;
+        f[0] = coeff*vec[0];
+        f[1] = coeff*vec[1];
+        f[2] = coeff*vec[2];
+
+        std::array<double, 3> next_vec;
+        next_vec[0] = new_b.x - new_p.x;
+        next_vec[1] = new_b.y - new_p.y;
+        next_vec[2] = new_b.z - new_p.z;
+        const double next_distance = std::sqrt(next_vec[0]*next_vec[0] + next_vec[1]*next_vec[1] + next_vec[2]*next_vec[2]);
+        const double next_coeff = (-1.0*coupling_coefficient*(next_distance - equilibrium_length)) /next_distance;
+        std::array<double, 3> next_f;
+        next_f[0] = next_coeff*next_vec[0];
+        next_f[1] = next_coeff*next_vec[1];
+        next_f[2] = next_coeff*next_vec[2];
+
         const double term1 = 1.0 - (friction_coefficient*delta_t)/2.0;
         const double term2 = 1.0 - (friction_coefficient*delta_t)/2.0 + ((friction_coefficient*delta_t)/2.0)*((friction_coefficient*delta_t)/2.0);
 
-        const double next_vx = b.vx*term1*term2 + (delta_t/2.0)*term2*(xi_t[i_particle][0] + xi_tph[i_particle][0]);
-        const double next_vy = b.vx*term1*term2 + (delta_t/2.0)*term2*(xi_t[i_particle][1] + xi_tph[i_particle][1]);
-        const double next_vz = b.vx*term1*term2 + (delta_t/2.0)*term2*(xi_t[i_particle][2] + xi_tph[i_particle][2]);
+        const double next_vx = b.vx*term1*term2 + (delta_t/2.0)*term2*(f[0]/b.mass +next_f[0]/b.mass +xi_t[i_particle][0] + xi_tph[i_particle][0]);
+        const double next_vy = b.vx*term1*term2 + (delta_t/2.0)*term2*(f[1]/b.mass +next_f[1]/b.mass +xi_t[i_particle][1] + xi_tph[i_particle][1]);
+        const double next_vz = b.vx*term1*term2 + (delta_t/2.0)*term2*(f[2]/b.mass +next_f[2]/b.mass +xi_t[i_particle][2] + xi_tph[i_particle][2]);
 
         return {next_vx, next_vy, next_vz};
     }
@@ -217,7 +252,7 @@ namespace generalized_langevin {
         std::array<double, 3> vec;
         vec[0] = p.x - b.x;
         vec[1] = p.y - b.y;
-        vec[2] = p.x - b.z;
+        vec[2] = p.z - b.z;
         const double distance = std::sqrt(vec[0]*vec[0] + vec[1]*vec[1] + vec[2]*vec[2]);
         
         const double term1 = (-1.0*coupling_coefficient*(distance - equilibrium_length)) /distance;
@@ -238,11 +273,11 @@ namespace generalized_langevin {
         return {next_x, next_y, next_z};
     }
 
-    std::array<double, 3> Simulator::calculate_velocity(Particle p, Particle new_p, Particle b) noexcept {
+    std::array<double, 3> Simulator::calculate_velocity(Particle p, Particle new_p, Particle b, Particle new_b) noexcept {
         std::array<double, 3> vec;
         vec[0] = p.x - b.x;
         vec[1] = p.y - b.y;
-        vec[2] = p.x - b.z;
+        vec[2] = p.z - b.z;
         const double distance = std::sqrt(vec[0]*vec[0] + vec[1]*vec[1] + vec[2]*vec[2]);  
         const double term1 = (-1.0*coupling_coefficient*(distance - equilibrium_length)) /distance;
         std::array<double,3> f;
@@ -256,9 +291,9 @@ namespace generalized_langevin {
         f[2] += f_potential[2];
 
         std::array<double, 3> next_vec;
-        next_vec[0] = new_p.x - b.x;
-        next_vec[1] = new_p.y - b.y;
-        next_vec[2] = new_p.z - b.z;
+        next_vec[0] = new_p.x - new_b.x;
+        next_vec[1] = new_p.y - new_b.y;
+        next_vec[2] = new_p.z - new_b.z;
         const double next_distance = std::sqrt(next_vec[0]*next_vec[0] + next_vec[1]*next_vec[1] + next_vec[2]*next_vec[2]);
         const double next_term1 = (-1.0*coupling_coefficient*(next_distance - equilibrium_length)) /next_distance;
         std::array<double, 3> next_f;
