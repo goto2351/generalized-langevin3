@@ -123,7 +123,7 @@ namespace generalized_langevin {
             std::cerr << "cannot open:" << working_path + "/" + project_name + "_distance.txt" << std::endl;
             std::exit(1);
         }
-        out_distance << "step,time,average_distance" << std::endl;//見出し
+        out_distance << "step,time,average_distance,reacted" << std::endl;//見出し
 
         step_num = toml::find<std::size_t>(input_setup_file, "meta_data", "step_num");
         save_step_num = toml::find<std::size_t>(input_setup_file, "meta_data", "save_step_num");
@@ -338,19 +338,34 @@ namespace generalized_langevin {
 
     void  Simulator::write_output(std::size_t step_index) noexcept {
         //座標の書き出し
+        /*
         out_coordinate << "2" << std::endl;
         out_coordinate << std::endl;
         out_coordinate << "H " << bath[0].x << " " << bath[0].y << " " << bath[0].z << std::endl;
         out_coordinate << "C " << particle[0].x << " " << particle[0].y << " " << particle[0].z << std::endl;
+        */
+       //粒子のみを全て書き出す
+       out_coordinate << n_particle << std::endl;
+       out_coordinate << std::endl;
+       for (std::size_t i = 0; i < n_particle; i++) {
+           out_coordinate << "C" << particle[i].x << " " << particle[i].y << " " << particle[i].z << std::endl;
+       }
 
         //粒子の原点からの距離の平均を書き出す
-        double average;
+        double average;//平均距離
+        std::size_t n_reacted = 0;//反応した粒子の数
+        double const minimum_r = M_PI/potential_coefficient;
         for (std::size_t i = 0; i < n_particle; ++i) {
-            average += distance(particle[i]);
+            double const r = distance(particle[i]);
+            average += r;
+            //粒子が極大点を越えているか
+            if (r > minimum_r) {
+                ++n_reacted;
+            }
         }
         average = average/n_particle;
         
-        out_distance << step_index << "," << step_index*delta_t << "," << average << std::endl;
+        out_distance << step_index << "," << step_index*delta_t << "," << average << ","<< n_reacted <<std::endl;
         /*
         //エネルギーの書き出し
         double kinetic_energy = particle.mass*(std::pow(particle.vx, 2.0) + std::pow(particle.vy, 2.0) + std::pow(particle.vz, 2.0))/2.0
